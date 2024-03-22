@@ -12,6 +12,25 @@ import pears/combinators.{
   one_of, pair, recognize, right, sep_by0, seq, to,
 }
 
+pub type ParseError {
+  UnexpectedToken(found: Char)
+  UnexpectedEndOfInput
+}
+
+fn run_parser(
+  parser: pears.Parser(Char, a),
+  input: String,
+) -> Result(a, ParseError) {
+  case parser(chars.input(input)) {
+    Ok(pears.Parsed(_, j)) -> Ok(j)
+    Error(e) ->
+      Error(case e {
+        pears.UnexpectedToken(_, _, f) -> UnexpectedToken(f)
+        pears.UnexpectedEndOfInput(_, _) -> UnexpectedEndOfInput
+      })
+  }
+}
+
 pub type JsonObject =
   Dict(String, JsonValue)
 
@@ -27,15 +46,20 @@ pub type JsonValue {
   Null
 }
 
-fn whitespace0() -> Parser(Char, List(Char)) {
+fn ws0() -> Parser(Char, List(Char)) {
   one_of([" ", "\n", "\r", "\t"])
   |> many0()
 }
 
-fn value_parser() -> Parser(Char, JsonValue) {
-  let padded = fn(parser: Parser(_, a)) { left(parser, whitespace0()) }
-  let symbol = fn(s: String) { padded(string(s)) }
+fn padded(p: Parser(_, a)) {
+  left(p, ws0())
+}
 
+fn symbol(s: String) {
+  padded(string(s))
+}
+
+fn value_parser() -> Parser(Char, JsonValue) {
   let hex_digit =
     one_of([
       "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e",
@@ -140,29 +164,62 @@ fn value_parser() -> Parser(Char, JsonValue) {
 
 fn json_parser() -> Parser(Char, JsonValue) {
   value_parser()
-  |> between(whitespace0(), eof())
+  |> between(ws0(), eof())
 }
 
-pub type JsonParseError {
-  UnexpectedToken(found: Char)
-  UnexpectedEndOfInput
-}
-
-pub fn parse_json(value: String) -> Result(JsonValue, JsonParseError) {
-  case json_parser()(chars.input(value)) {
-    Ok(pears.Parsed(_, j)) -> Ok(j)
-    Error(e) ->
-      Error(case e {
-        pears.UnexpectedToken(_, _, f) -> UnexpectedToken(f)
-        pears.UnexpectedEndOfInput(_, _) -> UnexpectedEndOfInput
-      })
-  }
+pub fn parse_json(value: String) -> Result(JsonValue, ParseError) {
+  run_parser(json_parser(), value)
 }
 
 pub type JsonQuery {
   Root
-  Key(JsonQuery, key: String)
-  Index(JsonQuery, index: Int)
+  Key(query: JsonQuery, key: String)
+  KeyOr(query: JsonQuery, key: String, or: JsonValue)
+  Index(query: JsonQuery, index: Int)
+  IndexOr(query: JsonQuery, index: Int, or: JsonValue)
+  Filter(query: JsonQuery, predicate: fn(JsonValue) -> Bool)
+  Map(query: JsonQuery, mapping: fn(JsonValue) -> JsonValue)
+  FilterMap(query: JsonQuery, mapping: fn(JsonValue) -> Result(JsonValue, Nil))
+  ForEach(query: JsonQuery)
+  ForEachOk(query: JsonQuery)
+}
+
+type InvJsonQuery {
+  InvEnd
+  InvKey(key: String, query: InvJsonQuery)
+  InvKeyOr(key: String, or: JsonValue, query: InvJsonQuery)
+  InvIndex(index: Int, query: InvJsonQuery)
+  InvIndexOr(index: Int, or: JsonValue, query: InvJsonQuery)
+  InvFilter(predicate: fn(JsonValue) -> Bool, query: InvJsonQuery)
+  InvMap(mapping: fn(JsonValue) -> JsonValue, query: InvJsonQuery)
+  InvFilterMap(
+    mapping: fn(JsonValue) -> Result(JsonValue, Nil),
+    query: InvJsonQuery,
+  )
+  InvForEach(query: InvJsonQuery)
+  InvForEachOk(query: InvJsonQuery)
+}
+
+fn invert_query_rec(query: JsonQuery, state: InvJsonQuery) -> InvJsonQuery {
+  case query {
+    Root -> state
+    Key(query, key) -> invert_query_rec(query, InvKey(key, state))
+    KeyOr(query, key, o) -> invert_query_rec(query, InvKeyOr(key, o, state))
+    Index(query, index) -> invert_query_rec(query, InvIndex(index, state))
+    IndexOr(query, index, or) ->
+      invert_query_rec(query, InvIndexOr(index, or, state))
+    Filter(query, predicate) ->
+      invert_query_rec(query, InvFilter(predicate, state))
+    Map(query, mapping) -> invert_query_rec(query, InvMap(mapping, state))
+    FilterMap(query, mapping) ->
+      invert_query_rec(query, InvFilterMap(mapping, state))
+    ForEach(query) -> invert_query_rec(query, InvForEach(state))
+    ForEachOk(query) -> invert_query_rec(query, InvForEachOk(state))
+  }
+}
+
+fn invert_query(query: JsonQuery) -> InvJsonQuery {
+  invert_query_rec(query, InvEnd)
 }
 
 pub type JsonQueryError {
@@ -171,27 +228,103 @@ pub type JsonQueryError {
   IndexOutOfBounds(JsonValue, index: Int)
 }
 
-pub fn query_json(
+fn query_json_rec(
   json: JsonValue,
-  query: JsonQuery,
+  query: InvJsonQuery,
 ) -> Result(JsonValue, JsonQueryError) {
   case query {
-    Root -> Ok(json)
-    Key(q, k) ->
-      case query_json(json, q) {
-        Ok(Object(o) as j) ->
-          dict.get(o, k)
-          |> result.replace_error(MissingObjectKey(j, k))
-        Ok(j) -> Error(UnexpectedType(j))
-        x -> x
+    InvEnd -> Ok(json)
+    InvKey(key, q) ->
+      case json {
+        Object(obj) as j ->
+          obj
+          |> dict.get(key)
+          |> result.replace_error(MissingObjectKey(j, key))
+        j -> Error(UnexpectedType(j))
       }
-    Index(q, i) ->
-      case query_json(json, q) {
-        Ok(Array(a) as j) ->
-          list.at(a, i)
-          |> result.replace_error(IndexOutOfBounds(j, i))
-        Ok(j) -> Error(UnexpectedType(j))
-        x -> x
+      |> result.map(query_json_rec(_, q))
+      |> result.flatten
+    InvKeyOr(key, or, q) ->
+      case json {
+        Object(obj) ->
+          obj
+          |> dict.get(key)
+          |> result.unwrap(or)
+          |> Ok
+        j -> Error(UnexpectedType(j))
+      }
+      |> result.map(query_json_rec(_, q))
+      |> result.flatten
+    InvIndex(index, q) ->
+      case json {
+        Array(arr) as j ->
+          arr
+          |> list.at(index)
+          |> result.replace_error(IndexOutOfBounds(j, index))
+        j -> Error(UnexpectedType(j))
+      }
+      |> result.map(query_json_rec(_, q))
+      |> result.flatten
+    InvIndexOr(index, or, q) ->
+      case json {
+        Array(arr) ->
+          arr
+          |> list.at(index)
+          |> result.unwrap(or)
+          |> Ok
+        j -> Error(UnexpectedType(j))
+      }
+      |> result.map(query_json_rec(_, q))
+      |> result.flatten
+    InvFilter(predicate, q) ->
+      case json {
+        Array(arr) ->
+          arr
+          |> list.filter(predicate)
+          |> Array
+          |> query_json_rec(q)
+        j -> Error(UnexpectedType(j))
+      }
+    InvMap(mapping, q) ->
+      case json {
+        Array(arr) ->
+          arr
+          |> list.map(mapping)
+          |> Array
+          |> query_json_rec(q)
+        j -> Error(UnexpectedType(j))
+      }
+    InvFilterMap(mapping, q) ->
+      case json {
+        Array(arr) ->
+          arr
+          |> list.filter_map(mapping)
+          |> Array
+          |> query_json_rec(q)
+        j -> Error(UnexpectedType(j))
+      }
+    InvForEach(q) ->
+      case json {
+        Array(arr) ->
+          arr
+          |> list.map(query_json_rec(_, q))
+          |> result.all
+          |> result.map(Array)
+        j -> Error(UnexpectedType(j))
+      }
+    InvForEachOk(q) ->
+      case json {
+        Array(arr) ->
+          arr
+          |> list.map(query_json_rec(_, q))
+          |> result.values
+          |> Array
+          |> Ok
+        j -> Error(UnexpectedType(j))
       }
   }
+}
+
+pub fn query_json(json: JsonValue, query: JsonQuery) {
+  query_json_rec(json, invert_query(query))
 }

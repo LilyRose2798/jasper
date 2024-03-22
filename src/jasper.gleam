@@ -179,6 +179,8 @@ pub type JsonQuery {
   IndexOr(query: JsonQuery, index: Int, or: JsonValue)
   Filter(query: JsonQuery, predicate: fn(JsonValue) -> Bool)
   Map(query: JsonQuery, mapping: fn(JsonValue) -> JsonValue)
+  MapKeys(query: JsonQuery, mapping: fn(String) -> String)
+  MapValues(query: JsonQuery, mapping: fn(String, JsonValue) -> JsonValue)
   FilterMap(query: JsonQuery, mapping: fn(JsonValue) -> Result(JsonValue, Nil))
   ForEach(query: JsonQuery)
   ForEachOk(query: JsonQuery)
@@ -192,6 +194,8 @@ type InvJsonQuery {
   InvIndexOr(index: Int, or: JsonValue, query: InvJsonQuery)
   InvFilter(predicate: fn(JsonValue) -> Bool, query: InvJsonQuery)
   InvMap(mapping: fn(JsonValue) -> JsonValue, query: InvJsonQuery)
+  InvMapKeys(mapping: fn(String) -> String, query: InvJsonQuery)
+  InvMapValues(mapping: fn(String, JsonValue) -> JsonValue, query: InvJsonQuery)
   InvFilterMap(
     mapping: fn(JsonValue) -> Result(JsonValue, Nil),
     query: InvJsonQuery,
@@ -211,6 +215,10 @@ fn invert_query_rec(query: JsonQuery, state: InvJsonQuery) -> InvJsonQuery {
     Filter(query, predicate) ->
       invert_query_rec(query, InvFilter(predicate, state))
     Map(query, mapping) -> invert_query_rec(query, InvMap(mapping, state))
+    MapKeys(query, mapping) ->
+      invert_query_rec(query, InvMapKeys(mapping, state))
+    MapValues(query, mapping) ->
+      invert_query_rec(query, InvMapValues(mapping, state))
     FilterMap(query, mapping) ->
       invert_query_rec(query, InvFilterMap(mapping, state))
     ForEach(query) -> invert_query_rec(query, InvForEach(state))
@@ -291,6 +299,26 @@ fn query_json_rec(
           arr
           |> list.map(mapping)
           |> Array
+          |> query_json_rec(q)
+        j -> Error(UnexpectedType(j))
+      }
+    InvMapKeys(mapping, q) ->
+      case json {
+        Object(obj) ->
+          obj
+          |> dict.to_list
+          |> list.map(fn(kv) { #(mapping(kv.0), kv.1) })
+          |> dict.from_list
+          |> Object
+          |> query_json_rec(q)
+        j -> Error(UnexpectedType(j))
+      }
+    InvMapValues(mapping, q) ->
+      case json {
+        Object(obj) ->
+          obj
+          |> dict.map_values(mapping)
+          |> Object
           |> query_json_rec(q)
         j -> Error(UnexpectedType(j))
       }

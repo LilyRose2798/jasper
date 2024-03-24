@@ -5,7 +5,7 @@ description = "Utilities for parsing and querying JSON data"
 licences = ["AGPL-3.0-only"]
 repository = { type = "github", user = "LilyRose2798", repo = "jasper" }
 links = [
-  { title = "Self-Hosted Git", href = "https://git.7cs.dev/lily/jasper" },
+  { title = "7Circles Git", href = "https://git.7cs.dev/lily/jasper" },
 ]
 
 [dependencies]

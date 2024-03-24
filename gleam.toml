@@ -1,5 +1,5 @@
 name = "jasper"
-version = "1.1.1"
+version = "1.1.2"
 
 description = "Utilities for parsing and querying JSON data"
 licences = ["AGPL-3.0-only"]

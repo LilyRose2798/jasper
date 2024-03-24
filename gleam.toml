@@ -3,7 +3,10 @@ version = "1.1.2"
 
 description = "Utilities for parsing and querying JSON data"
 licences = ["AGPL-3.0-only"]
-repository = { type = "forgejo", host = "git.7cs.dev", user = "lily", repo = "jasper" }
+repository = { type = "github", user = "LilyRose2798", repo = "jasper" }
+links = [
+  { title = "Self-Hosted Git", href = "https://git.7cs.dev/lily/jasper" },
+]
 
 [dependencies]
 gleam_stdlib = "~> 0.34 or ~> 1.0"

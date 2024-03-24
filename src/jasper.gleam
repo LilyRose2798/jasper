@@ -90,7 +90,7 @@ fn value_parser() -> Parser(Char, JsonValue) {
     )
 
   let str =
-    none_of(["\""])
+    none_of(["\"", "\\"])
     |> alt(escape)
     |> many0()
     |> map(string.concat)

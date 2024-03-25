@@ -171,6 +171,105 @@ pub fn parse_json(value: String) -> Result(JsonValue, ParseError) {
   run_parser(value, json_parser())
 }
 
+fn stringify_json_spaced_rec(
+  value: JsonValue,
+  space: String,
+  depth: Int,
+) -> String {
+  case value {
+    Object(obj) ->
+      case dict.to_list(obj) {
+        [] -> "{}"
+        ls ->
+          "{\n"
+          <> string.repeat(space, depth + 1)
+          <> {
+            list.map(ls, fn(kv) {
+              "\""
+              <> kv.0
+              <> "\": "
+              <> stringify_json_spaced_rec(kv.1, space, depth + 1)
+            })
+            |> string.join(",\n" <> string.repeat(space, depth + 1))
+          }
+          <> "\n"
+          <> string.repeat(space, depth)
+          <> "}"
+      }
+    Array([]) -> "[]"
+    Array(arr) ->
+      "[\n"
+      <> string.repeat(space, depth + 1)
+      <> {
+        arr
+        |> list.map(stringify_json_spaced_rec(_, space, depth + 1))
+        |> string.join(",\n" <> string.repeat(space, depth + 1))
+      }
+      <> "\n"
+      <> string.repeat(space, depth)
+      <> "]"
+    String(str) -> "\"" <> str <> "\""
+    Number(flt) -> float.to_string(flt)
+    Boolean(True) -> "true"
+    Boolean(False) -> "false"
+    Null -> "null"
+  }
+}
+
+pub type Indentation {
+  Spaces(Int)
+  Tab
+  Tabs(Int)
+}
+
+pub fn stringify_json_spaced(
+  value: JsonValue,
+  indentation: Indentation,
+) -> String {
+  stringify_json_spaced_rec(
+    value,
+    case indentation {
+      Spaces(n) -> string.repeat(" ", n)
+      Tab -> "\t"
+      Tabs(n) -> string.repeat("\t", n)
+    },
+    0,
+  )
+}
+
+pub fn stringify_json(value: JsonValue) -> String {
+  case value {
+    Object(obj) ->
+      "{"
+      <> {
+        obj
+        |> dict.to_list
+        |> list.map(fn(kv) { "\"" <> kv.0 <> "\":" <> stringify_json(kv.1) })
+        |> string.join(",")
+      }
+      <> "}"
+    Array(arr) ->
+      "["
+      <> {
+        arr
+        |> list.map(stringify_json)
+        |> string.join(",")
+      }
+      <> "]"
+    String(str) -> "\"" <> str <> "\""
+    Number(flt) -> float.to_string(flt)
+    Boolean(True) -> "true"
+    Boolean(False) -> "false"
+    Null -> "null"
+  }
+}
+
+pub fn stringify_jsonl(values: List(JsonValue)) -> String {
+  values
+  |> list.map(stringify_json)
+  |> string.join("\n")
+}
+
 fn split_jsonl(value: String) -> List(String) {
   case string.last(value) {
     Ok("\n") -> string.drop_right(value, 1)

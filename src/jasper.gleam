@@ -18,8 +18,8 @@ pub type ParseError {
 }
 
 fn run_parser(
-  parser: pears.Parser(Char, a),
   input: String,
+  parser: pears.Parser(Char, a),
 ) -> Result(a, ParseError) {
   case parser(chars.input(input)) {
     Ok(pears.Parsed(_, j)) -> Ok(j)
@@ -168,7 +168,31 @@ fn json_parser() -> Parser(Char, JsonValue) {
 }
 
 pub fn parse_json(value: String) -> Result(JsonValue, ParseError) {
-  run_parser(json_parser(), value)
+  run_parser(value, json_parser())
+}
+
+fn split_jsonl(value: String) -> List(String) {
+  case string.last(value) {
+    Ok("\n") -> string.drop_right(value, 1)
+    _ -> value
+  }
+  |> string.split("\n")
+}
+
+pub fn parse_jsonl(value: String) -> Result(List(JsonValue), ParseError) {
+  let parse = run_parser(_, json_parser())
+  list.try_map(split_jsonl(value), parse)
+}
+
+pub fn parse_jsonl_all(value: String) -> List(Result(JsonValue, ParseError)) {
+  let parse = run_parser(_, json_parser())
+  list.map(split_jsonl(value), parse)
+}
+
+pub fn parse_jsonl_valid(value: String) -> List(JsonValue) {
+  value
+  |> parse_jsonl_all
+  |> result.values
 }
 
 pub type JsonQuery {

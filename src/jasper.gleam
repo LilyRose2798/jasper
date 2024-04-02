@@ -348,21 +348,6 @@ fn json_parser(options: JsonParseOptions) -> JsonParser(JsonValue) {
   |> between(allow_comments(options, ws(options)), end())
 }
 
-import gleam/io
-
-pub fn main() {
-  //   io.debug(parse_jsonc(
-  //     " /* asdf */  [1 ,  // asdf \n 2/* asdf */, { \"k\"/* asdf */ :// asdf\n 3}]",
-  //   ))
-  //   io.debug(parse_jsonc(
-  //     "{
-  //   \"foo\":/* * / */ \"121234\",
-  //   \"foo\":/* *//* /*** */ \"121234\"
-  // } // asdf",
-  //   ))
-  io.debug(parse_json5("{bar: -0x14,\"foo\": \"a\\x23\\\r\nsd\\Af\",}"))
-}
-
 pub type JsonParseOptions {
   JsonParseOptions(
     comments: Bool,
@@ -546,188 +531,189 @@ pub fn stringify_jsonl(values: List(JsonValue)) -> String {
   |> list.map(stringify_json)
   |> string.join("\n")
 }
-// pub type JsonQuery {
-//   Root
-//   Key(query: JsonQuery, key: String)
-//   KeyOr(query: JsonQuery, key: String, or: JsonValue)
-//   Index(query: JsonQuery, index: Int)
-//   IndexOr(query: JsonQuery, index: Int, or: JsonValue)
-//   Filter(query: JsonQuery, predicate: fn(JsonValue) -> Bool)
-//   Map(query: JsonQuery, mapping: fn(JsonValue) -> JsonValue)
-//   MapKeys(query: JsonQuery, mapping: fn(String) -> String)
-//   MapValues(query: JsonQuery, mapping: fn(String, JsonValue) -> JsonValue)
-//   FilterMap(query: JsonQuery, mapping: fn(JsonValue) -> Result(JsonValue, Nil))
-//   ForEach(query: JsonQuery)
-//   ForEachOk(query: JsonQuery)
-// }
 
-// type InvJsonQuery {
-//   InvEnd
-//   InvKey(key: String, query: InvJsonQuery)
-//   InvKeyOr(key: String, or: JsonValue, query: InvJsonQuery)
-//   InvIndex(index: Int, query: InvJsonQuery)
-//   InvIndexOr(index: Int, or: JsonValue, query: InvJsonQuery)
-//   InvFilter(predicate: fn(JsonValue) -> Bool, query: InvJsonQuery)
-//   InvMap(mapping: fn(JsonValue) -> JsonValue, query: InvJsonQuery)
-//   InvMapKeys(mapping: fn(String) -> String, query: InvJsonQuery)
-//   InvMapValues(mapping: fn(String, JsonValue) -> JsonValue, query: InvJsonQuery)
-//   InvFilterMap(
-//     mapping: fn(JsonValue) -> Result(JsonValue, Nil),
-//     query: InvJsonQuery,
-//   )
-//   InvForEach(query: InvJsonQuery)
-//   InvForEachOk(query: InvJsonQuery)
-// }
+pub type JsonQuery {
+  Root
+  Key(query: JsonQuery, key: String)
+  KeyOr(query: JsonQuery, key: String, or: JsonValue)
+  Index(query: JsonQuery, index: Int)
+  IndexOr(query: JsonQuery, index: Int, or: JsonValue)
+  Filter(query: JsonQuery, predicate: fn(JsonValue) -> Bool)
+  Map(query: JsonQuery, mapping: fn(JsonValue) -> JsonValue)
+  MapKeys(query: JsonQuery, mapping: fn(String) -> String)
+  MapValues(query: JsonQuery, mapping: fn(String, JsonValue) -> JsonValue)
+  FilterMap(query: JsonQuery, mapping: fn(JsonValue) -> Result(JsonValue, Nil))
+  ForEach(query: JsonQuery)
+  ForEachOk(query: JsonQuery)
+}
 
-// fn invert_query_rec(query: JsonQuery, state: InvJsonQuery) -> InvJsonQuery {
-//   case query {
-//     Root -> state
-//     Key(query, key) -> invert_query_rec(query, InvKey(key, state))
-//     KeyOr(query, key, o) -> invert_query_rec(query, InvKeyOr(key, o, state))
-//     Index(query, index) -> invert_query_rec(query, InvIndex(index, state))
-//     IndexOr(query, index, or) ->
-//       invert_query_rec(query, InvIndexOr(index, or, state))
-//     Filter(query, predicate) ->
-//       invert_query_rec(query, InvFilter(predicate, state))
-//     Map(query, mapping) -> invert_query_rec(query, InvMap(mapping, state))
-//     MapKeys(query, mapping) ->
-//       invert_query_rec(query, InvMapKeys(mapping, state))
-//     MapValues(query, mapping) ->
-//       invert_query_rec(query, InvMapValues(mapping, state))
-//     FilterMap(query, mapping) ->
-//       invert_query_rec(query, InvFilterMap(mapping, state))
-//     ForEach(query) -> invert_query_rec(query, InvForEach(state))
-//     ForEachOk(query) -> invert_query_rec(query, InvForEachOk(state))
-//   }
-// }
+type InvJsonQuery {
+  InvEnd
+  InvKey(key: String, query: InvJsonQuery)
+  InvKeyOr(key: String, or: JsonValue, query: InvJsonQuery)
+  InvIndex(index: Int, query: InvJsonQuery)
+  InvIndexOr(index: Int, or: JsonValue, query: InvJsonQuery)
+  InvFilter(predicate: fn(JsonValue) -> Bool, query: InvJsonQuery)
+  InvMap(mapping: fn(JsonValue) -> JsonValue, query: InvJsonQuery)
+  InvMapKeys(mapping: fn(String) -> String, query: InvJsonQuery)
+  InvMapValues(mapping: fn(String, JsonValue) -> JsonValue, query: InvJsonQuery)
+  InvFilterMap(
+    mapping: fn(JsonValue) -> Result(JsonValue, Nil),
+    query: InvJsonQuery,
+  )
+  InvForEach(query: InvJsonQuery)
+  InvForEachOk(query: InvJsonQuery)
+}
 
-// fn invert_query(query: JsonQuery) -> InvJsonQuery {
-//   invert_query_rec(query, InvEnd)
-// }
+fn invert_query_rec(query: JsonQuery, state: InvJsonQuery) -> InvJsonQuery {
+  case query {
+    Root -> state
+    Key(query, key) -> invert_query_rec(query, InvKey(key, state))
+    KeyOr(query, key, o) -> invert_query_rec(query, InvKeyOr(key, o, state))
+    Index(query, index) -> invert_query_rec(query, InvIndex(index, state))
+    IndexOr(query, index, or) ->
+      invert_query_rec(query, InvIndexOr(index, or, state))
+    Filter(query, predicate) ->
+      invert_query_rec(query, InvFilter(predicate, state))
+    Map(query, mapping) -> invert_query_rec(query, InvMap(mapping, state))
+    MapKeys(query, mapping) ->
+      invert_query_rec(query, InvMapKeys(mapping, state))
+    MapValues(query, mapping) ->
+      invert_query_rec(query, InvMapValues(mapping, state))
+    FilterMap(query, mapping) ->
+      invert_query_rec(query, InvFilterMap(mapping, state))
+    ForEach(query) -> invert_query_rec(query, InvForEach(state))
+    ForEachOk(query) -> invert_query_rec(query, InvForEachOk(state))
+  }
+}
 
-// pub type JsonQueryError {
-//   UnexpectedType(JsonValue)
-//   MissingObjectKey(JsonValue, key: String)
-//   IndexOutOfBounds(JsonValue, index: Int)
-// }
+fn invert_query(query: JsonQuery) -> InvJsonQuery {
+  invert_query_rec(query, InvEnd)
+}
 
-// fn query_json_rec(
-//   json: JsonValue,
-//   query: InvJsonQuery,
-// ) -> Result(JsonValue, JsonQueryError) {
-//   case query {
-//     InvEnd -> Ok(json)
-//     InvKey(key, q) ->
-//       case json {
-//         Object(obj) as j ->
-//           obj
-//           |> dict.get(key)
-//           |> result.replace_error(MissingObjectKey(j, key))
-//         j -> Error(UnexpectedType(j))
-//       }
-//       |> result.map(query_json_rec(_, q))
-//       |> result.flatten
-//     InvKeyOr(key, or, q) ->
-//       case json {
-//         Object(obj) ->
-//           obj
-//           |> dict.get(key)
-//           |> result.unwrap(or)
-//           |> Ok
-//         j -> Error(UnexpectedType(j))
-//       }
-//       |> result.map(query_json_rec(_, q))
-//       |> result.flatten
-//     InvIndex(index, q) ->
-//       case json {
-//         Array(arr) as j ->
-//           arr
-//           |> list.at(index)
-//           |> result.replace_error(IndexOutOfBounds(j, index))
-//         j -> Error(UnexpectedType(j))
-//       }
-//       |> result.map(query_json_rec(_, q))
-//       |> result.flatten
-//     InvIndexOr(index, or, q) ->
-//       case json {
-//         Array(arr) ->
-//           arr
-//           |> list.at(index)
-//           |> result.unwrap(or)
-//           |> Ok
-//         j -> Error(UnexpectedType(j))
-//       }
-//       |> result.map(query_json_rec(_, q))
-//       |> result.flatten
-//     InvFilter(predicate, q) ->
-//       case json {
-//         Array(arr) ->
-//           arr
-//           |> list.filter(predicate)
-//           |> Array
-//           |> query_json_rec(q)
-//         j -> Error(UnexpectedType(j))
-//       }
-//     InvMap(mapping, q) ->
-//       case json {
-//         Array(arr) ->
-//           arr
-//           |> list.map(mapping)
-//           |> Array
-//           |> query_json_rec(q)
-//         j -> Error(UnexpectedType(j))
-//       }
-//     InvMapKeys(mapping, q) ->
-//       case json {
-//         Object(obj) ->
-//           obj
-//           |> dict.to_list
-//           |> list.map(fn(kv) { #(mapping(kv.0), kv.1) })
-//           |> dict.from_list
-//           |> Object
-//           |> query_json_rec(q)
-//         j -> Error(UnexpectedType(j))
-//       }
-//     InvMapValues(mapping, q) ->
-//       case json {
-//         Object(obj) ->
-//           obj
-//           |> dict.map_values(mapping)
-//           |> Object
-//           |> query_json_rec(q)
-//         j -> Error(UnexpectedType(j))
-//       }
-//     InvFilterMap(mapping, q) ->
-//       case json {
-//         Array(arr) ->
-//           arr
-//           |> list.filter_map(mapping)
-//           |> Array
-//           |> query_json_rec(q)
-//         j -> Error(UnexpectedType(j))
-//       }
-//     InvForEach(q) ->
-//       case json {
-//         Array(arr) ->
-//           arr
-//           |> list.map(query_json_rec(_, q))
-//           |> result.all
-//           |> result.map(Array)
-//         j -> Error(UnexpectedType(j))
-//       }
-//     InvForEachOk(q) ->
-//       case json {
-//         Array(arr) ->
-//           arr
-//           |> list.map(query_json_rec(_, q))
-//           |> result.values
-//           |> Array
-//           |> Ok
-//         j -> Error(UnexpectedType(j))
-//       }
-//   }
-// }
+pub type JsonQueryError {
+  UnexpectedType(JsonValue)
+  MissingObjectKey(JsonValue, key: String)
+  IndexOutOfBounds(JsonValue, index: Int)
+}
 
-// pub fn query_json(json: JsonValue, query: JsonQuery) {
-//   query_json_rec(json, invert_query(query))
-// }
+fn query_json_rec(
+  json: JsonValue,
+  query: InvJsonQuery,
+) -> Result(JsonValue, JsonQueryError) {
+  case query {
+    InvEnd -> Ok(json)
+    InvKey(key, q) ->
+      case json {
+        Object(obj) as j ->
+          obj
+          |> dict.get(key)
+          |> result.replace_error(MissingObjectKey(j, key))
+        j -> Error(UnexpectedType(j))
+      }
+      |> result.map(query_json_rec(_, q))
+      |> result.flatten
+    InvKeyOr(key, or, q) ->
+      case json {
+        Object(obj) ->
+          obj
+          |> dict.get(key)
+          |> result.unwrap(or)
+          |> Ok
+        j -> Error(UnexpectedType(j))
+      }
+      |> result.map(query_json_rec(_, q))
+      |> result.flatten
+    InvIndex(index, q) ->
+      case json {
+        Array(arr) as j ->
+          arr
+          |> list.at(index)
+          |> result.replace_error(IndexOutOfBounds(j, index))
+        j -> Error(UnexpectedType(j))
+      }
+      |> result.map(query_json_rec(_, q))
+      |> result.flatten
+    InvIndexOr(index, or, q) ->
+      case json {
+        Array(arr) ->
+          arr
+          |> list.at(index)
+          |> result.unwrap(or)
+          |> Ok
+        j -> Error(UnexpectedType(j))
+      }
+      |> result.map(query_json_rec(_, q))
+      |> result.flatten
+    InvFilter(predicate, q) ->
+      case json {
+        Array(arr) ->
+          arr
+          |> list.filter(predicate)
+          |> Array
+          |> query_json_rec(q)
+        j -> Error(UnexpectedType(j))
+      }
+    InvMap(mapping, q) ->
+      case json {
+        Array(arr) ->
+          arr
+          |> list.map(mapping)
+          |> Array
+          |> query_json_rec(q)
+        j -> Error(UnexpectedType(j))
+      }
+    InvMapKeys(mapping, q) ->
+      case json {
+        Object(obj) ->
+          obj
+          |> dict.to_list
+          |> list.map(fn(kv) { #(mapping(kv.0), kv.1) })
+          |> dict.from_list
+          |> Object
+          |> query_json_rec(q)
+        j -> Error(UnexpectedType(j))
+      }
+    InvMapValues(mapping, q) ->
+      case json {
+        Object(obj) ->
+          obj
+          |> dict.map_values(mapping)
+          |> Object
+          |> query_json_rec(q)
+        j -> Error(UnexpectedType(j))
+      }
+    InvFilterMap(mapping, q) ->
+      case json {
+        Array(arr) ->
+          arr
+          |> list.filter_map(mapping)
+          |> Array
+          |> query_json_rec(q)
+        j -> Error(UnexpectedType(j))
+      }
+    InvForEach(q) ->
+      case json {
+        Array(arr) ->
+          arr
+          |> list.map(query_json_rec(_, q))
+          |> result.all
+          |> result.map(Array)
+        j -> Error(UnexpectedType(j))
+      }
+    InvForEachOk(q) ->
+      case json {
+        Array(arr) ->
+          arr
+          |> list.map(query_json_rec(_, q))
+          |> result.values
+          |> Array
+          |> Ok
+        j -> Error(UnexpectedType(j))
+      }
+  }
+}
+
+pub fn query_json(json: JsonValue, query: JsonQuery) {
+  query_json_rec(json, invert_query(query))
+}

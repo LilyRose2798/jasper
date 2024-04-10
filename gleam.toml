@@ -10,7 +10,6 @@ links = [
 
 [dependencies]
 gleam_stdlib = "~> 0.34 or ~> 1.0"
-pears = "~> 0.3"
 party = "~> 1.0"
 
 [dev-dependencies]

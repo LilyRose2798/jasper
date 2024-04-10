@@ -4,21 +4,16 @@ import gleam/string
 import gleam/result
 import gleam/dict.{type Dict}
 import gleam/list
-import jasper/internal/parsing.{
-  type ParseError, type Parser, Parser, Position, Unexpected, between, char,
-  choice, choice_char, concat, digit, do, either, end, go, lazy, left, letter,
-  many, many1_concat, many_concat, map, pair, perhaps, perhaps_default,
-  perhaps_empty, return, right, satisfy, sep, string, to,
+import party.{
+  type ParseError, type Parser, char, choice, digit, do, either, end, go, lazy,
+  letter, many1_concat, many_concat, map, perhaps, return, satisfy, sep, string,
+  until,
 }
 
-pub type JsonParseError =
-  Nil
-
-pub type JsonParserError =
-  ParseError(JsonParseError)
-
-pub type JsonParser(a) =
-  Parser(a, JsonParseError)
+pub fn to(p: Parser(a, e), v: b) -> Parser(b, e) {
+  use _ <- do(p)
+  return(v)
+}
 
 pub type JsonObject =
   Dict(String, JsonValue)
@@ -35,8 +30,26 @@ pub type JsonValue {
   Null
 }
 
-fn ws(options: JsonParseOptions) -> JsonParser(String) {
-  many_concat(
+fn multiline_comment() -> Parser(String, e) {
+  use _ <- do(string("/*"))
+  use comment <- do(until(satisfy(fn(_) { True }), string("*/")))
+  return(string.concat(comment))
+}
+
+fn singleline_comment() -> Parser(String, e) {
+  use _ <- do(string("//"))
+  use comment <- do(
+    many_concat(satisfy(fn(c) { !string.contains("\r\n\u{2028}\u{2029}", c) })),
+  )
+  return(comment)
+}
+
+fn comment() -> Parser(String, e) {
+  either(multiline_comment(), singleline_comment())
+}
+
+fn ws(options: JsonParseOptions) -> Parser(String, e) {
+  let ws =
     satisfy(fn(c) {
       string.contains(
         case options.ecma_whitespace {
@@ -46,52 +59,46 @@ fn ws(options: JsonParseOptions) -> JsonParser(String) {
         },
         c,
       )
-    }),
-  )
+    })
+  many_concat(case options.comments {
+    True -> either(ws, comment())
+    False -> ws
+  })
 }
 
-fn padded(p: JsonParser(a), options: JsonParseOptions) -> JsonParser(a) {
-  left(p, ws(options))
+fn symbol(s: String, options: JsonParseOptions) -> Parser(String, e) {
+  use _ <- do(ws(options))
+  use c <- do(char(s))
+  return(c)
 }
 
-fn symbol(s: String, options: JsonParseOptions) -> JsonParser(String) {
-  char(s)
-  |> padded(options)
+fn json_null() -> Parser(Nil, e) {
+  to(string("null"), Nil)
 }
 
-fn json_null_parser() -> JsonParser(Nil) {
-  string("null")
-  |> to(Nil)
-}
-
-fn json_boolean_parser() -> JsonParser(Bool) {
+fn json_boolean() -> Parser(Bool, e) {
   either(to(string("true"), True), to(string("false"), False))
 }
 
-fn hex_digit_parser() -> JsonParser(String) {
-  choice_char([
-    "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e",
-    "f", "A", "B", "C", "D", "E", "F",
-  ])
+fn hex_digit() -> Parser(String, e) {
+  satisfy(fn(c) { string.contains("0123456789abcdefABCDEF", c) })
 }
 
-fn json_number_parser(options: JsonParseOptions) -> JsonParser(Float) {
-  let sign_parser =
-    either(char("+"), char("-"))
-    |> perhaps_empty
+fn json_number(options: JsonParseOptions) -> Parser(Float, e) {
+  let sign_parser = perhaps(either(char("+"), char("-")))
   let int_parser =
-    either(
-      char("0"),
-      concat(
-        choice_char(["1", "2", "3", "4", "5", "6", "7", "8", "9"]),
-        many_concat(digit()),
-      ),
-    )
+    either(char("0"), {
+      use d <- do(satisfy(fn(c) { string.contains("123456789", c) }))
+      use ds <- do(many_concat(digit()))
+      return(d <> ds)
+    })
   let exp_parser =
-    either(char("e"), char("E"))
-    |> concat(sign_parser)
-    |> concat(many1_concat(digit()))
-    |> perhaps_empty
+    perhaps({
+      use e <- do(either(char("e"), char("E")))
+      use sign <- do(sign_parser)
+      use digits <- do(many1_concat(digit()))
+      return(e <> result.unwrap(sign, "") <> digits)
+    })
   let min_double = -1.7976931348623158e308
   let max_double = 1.7976931348623158e308
 
@@ -99,38 +106,41 @@ fn json_number_parser(options: JsonParseOptions) -> JsonParser(Float) {
     True -> {
       use sign <- do(sign_parser)
       let inf = case sign {
-        "-" -> min_double
+        Ok("-") -> min_double
         _ -> max_double
       }
       choice([
         to(string("Infinity"), inf),
         to(string("NaN"), 0.0),
         {
-          use hex <- do(
-            either(string("0x"), string("0X"))
-            |> right(many1_concat(hex_digit_parser())),
-          )
-          let assert Ok(n) = int.base_parse(sign <> hex, 16)
+          use _ <- do(either(string("0x"), string("0X")))
+          use hex <- do(many1_concat(hex_digit()))
+          let assert Ok(n) = int.base_parse(result.unwrap(sign, "") <> hex, 16)
           return(int.to_float(n))
         },
         {
-          use n <- do(either(
-            {
-              use ns <- do(int_parser)
-              use ds <- do(
-                right(
-                  char("."),
-                  many1_concat(digit())
-                    |> perhaps_default("0"),
+          use n <- do(
+            either(
+              {
+                use ns <- do(int_parser)
+                use ds <- do(
+                  perhaps({
+                    use _ <- do(char("."))
+                    use ds <- do(perhaps(many1_concat(digit())))
+                    return(result.unwrap(ds, "0"))
+                  }),
                 )
-                |> perhaps_default("0"),
-              )
-              return(ns <> "." <> ds)
-            },
-            concat(to(char("."), "0."), many1_concat(digit())),
-          ))
+                return(ns <> "." <> result.unwrap(ds, "0"))
+              },
+              {
+                use _ <- do(char("."))
+                use ds <- do(many1_concat(digit()))
+                return("0." <> ds)
+              },
+            ),
+          )
           use ex <- do(exp_parser)
-          { sign <> n <> ex }
+          { result.unwrap(sign, "") <> n <> result.unwrap(ex, "") }
           |> float.parse
           |> result.unwrap(inf)
           |> return
@@ -138,21 +148,27 @@ fn json_number_parser(options: JsonParseOptions) -> JsonParser(Float) {
       ])
     }
     False -> {
-      use sign <- do(
-        char("-")
-        |> perhaps_empty,
-      )
+      use sign <- do(perhaps(char("-")))
       let inf = case sign {
-        "-" -> min_double
+        Ok("-") -> min_double
         _ -> max_double
       }
       use ns <- do(int_parser)
       use ds <- do(
-        right(char("."), many1_concat(digit()))
-        |> perhaps_default("0"),
+        perhaps({
+          use _ <- do(char("."))
+          use ds <- do(many1_concat(digit()))
+          return(ds)
+        }),
       )
       use ex <- do(exp_parser)
-      { sign <> ns <> "." <> ds <> ex }
+      {
+        result.unwrap(sign, "")
+        <> ns
+        <> "."
+        <> result.unwrap(ds, "0")
+        <> result.unwrap(ex, "")
+      }
       |> float.parse
       |> result.unwrap(inf)
       |> return
@@ -172,29 +188,27 @@ fn valid_string_char(c: String) -> Bool {
   i >= 0x20 && i <= 0x10FFFF
 }
 
-fn json_string_parser(options: JsonParseOptions) -> JsonParser(String) {
-  let hex_digit = hex_digit_parser()
-  let unicode_escape =
-    map(
-      right(
-        char("u"),
-        hex_digit
-          |> concat(hex_digit)
-          |> concat(hex_digit)
-          |> concat(hex_digit),
-      ),
-      string_to_codepoint,
-    )
+fn json_string(options: JsonParseOptions) -> Parser(String, e) {
+  let unicode_escape = {
+    use _ <- do(char("u"))
+    use a <- do(hex_digit())
+    use b <- do(hex_digit())
+    use c <- do(hex_digit())
+    use d <- do(hex_digit())
+    return(string_to_codepoint(a <> b <> c <> d))
+  }
 
-  let escape =
-    char("\\")
-    |> right(
+  let escape = {
+    use _ <- do(char("\\"))
+    use c <- do(
       choice(case options.ecma_strings {
         True -> [
-          map(
-            right(char("x"), concat(hex_digit, hex_digit)),
-            string_to_codepoint,
-          ),
+          {
+            use _ <- do(char("x"))
+            use a <- do(hex_digit())
+            use b <- do(hex_digit())
+            return(string_to_codepoint(a <> b))
+          },
           unicode_escape,
           char("\\"),
           char("/"),
@@ -232,12 +246,19 @@ fn json_string_parser(options: JsonParseOptions) -> JsonParser(String) {
         ]
       }),
     )
+    return(c)
+  }
 
   let str = fn(q) {
-    satisfy(fn(c) { c != q && c != "\\" && valid_string_char(c) })
-    |> either(escape)
-    |> many_concat()
-    |> between(char(q), char(q))
+    use _ <- do(char(q))
+    use str <- do(
+      many_concat(either(
+        escape,
+        satisfy(fn(c) { c != q && c != "\\" && valid_string_char(c) }),
+      )),
+    )
+    use _ <- do(char(q))
+    return(str)
   }
 
   case options.ecma_strings {
@@ -246,106 +267,67 @@ fn json_string_parser(options: JsonParseOptions) -> JsonParser(String) {
   }
 }
 
-fn parse_multiline_comment() -> JsonParser(String) {
-  Parser(fn(source, pos) {
-    let assert Position(row, col) = pos
-    case source {
-      [h, ..t] ->
-        case h {
-          "\n" -> Ok(#(h, t, Position(row + 1, 0)))
-          "*" ->
-            case t {
-              ["/", ..] -> Error(Unexpected(pos, h))
-              _ -> Ok(#(h, t, Position(row, col + 1)))
-            }
-          _ -> Ok(#(h, t, Position(row, col + 1)))
-        }
-      [] -> Error(Unexpected(pos, "EOF"))
-    }
-  })
-  |> many_concat
-  |> between(string("/*"), string("*/"))
-}
-
-fn parse_singleline_comment() -> JsonParser(String) {
-  right(
-    string("//"),
-    many_concat(satisfy(fn(c) { !string.contains("\r\n\u{2028}\u{2029}", c) })),
-  )
-}
-
-fn comment_parser(options: JsonParseOptions) -> JsonParser(String) {
-  either(parse_multiline_comment(), parse_singleline_comment())
-  |> padded(options)
-}
-
-fn allow_comments(options: JsonParseOptions, p: Parser(_, _)) {
-  case options.comments {
-    True -> left(p, many(comment_parser(options)))
-    False -> p
-  }
-}
-
-fn allow_trailing_comma(options: JsonParseOptions, p: Parser(_, _)) {
+fn allow_trailing_comma(p: Parser(a, e), options: JsonParseOptions) {
   case options.trailing_comma {
-    True -> right(perhaps(symbol(",", options)), p)
+    True -> {
+      use _ <- do(perhaps(symbol(",", options)))
+      use v <- do(p)
+      return(v)
+    }
     False -> p
   }
 }
 
-fn json_array_parser(options: JsonParseOptions) -> JsonParser(JsonArray) {
-  let json_value_parser = lazy(fn() { json_value_parser(options) })
-  let allow_comments = allow_comments(options, _)
-  sep(json_value_parser, allow_comments(symbol(",", options)))
-  |> between(
-    allow_comments(symbol("[", options)),
-    allow_trailing_comma(options, symbol("]", options)),
-  )
+fn json_array(options: JsonParseOptions) -> Parser(JsonArray, e) {
+  use _ <- do(symbol("[", options))
+  use values <- do(sep(lazy(fn() { json_value(options) }), symbol(",", options)))
+  use _ <- do(allow_trailing_comma(symbol("]", options), options))
+  return(values)
 }
 
 // todo
-fn ecmascript_identifier_parser() -> JsonParser(String) {
-  letter()
-  |> concat(
-    either(letter(), digit())
-    |> many_concat,
-  )
+fn ecmascript_identifier() -> Parser(String, e) {
+  use c <- do(letter())
+  use cs <- do(many_concat(either(letter(), digit())))
+  return(c <> cs)
 }
 
-fn json_object_parser(options: JsonParseOptions) -> JsonParser(JsonObject) {
-  let json_value_parser = lazy(fn() { json_value_parser(options) })
-  let allow_comments = allow_comments(options, _)
-  let key_parser = case options.ecma_object_keys {
-    True -> either(json_string_parser(options), ecmascript_identifier_parser())
-    False -> json_string_parser(options)
-  }
-  allow_comments(key_parser)
-  |> left(allow_comments(symbol(":", options)))
-  |> pair(json_value_parser)
-  |> sep(allow_comments(symbol(",", options)))
-  |> map(dict.from_list)
-  |> between(
-    allow_comments(symbol("{", options)),
-    allow_trailing_comma(options, symbol("}", options)),
-  )
+fn json_object(options: JsonParseOptions) -> Parser(JsonObject, e) {
+  use _ <- do(symbol("{", options))
+  use key_value_pairs <- do(sep(
+    {
+      use _ <- do(ws(options))
+      use key <- do(case options.ecma_object_keys {
+        True -> either(json_string(options), ecmascript_identifier())
+        False -> json_string(options)
+      })
+      use _ <- do(symbol(":", options))
+      use value <- do(lazy(fn() { json_value(options) }))
+      return(#(key, value))
+    },
+    symbol(",", options),
+  ))
+  use _ <- do(allow_trailing_comma(symbol("}", options), options))
+  return(dict.from_list(key_value_pairs))
 }
 
-fn json_value_parser(options: JsonParseOptions) -> JsonParser(JsonValue) {
+fn json_value(options: JsonParseOptions) -> Parser(JsonValue, e) {
+  use _ <- do(ws(options))
   choice([
-    to(json_null_parser(), Null),
-    map(json_boolean_parser(), Boolean),
-    map(json_number_parser(options), Number),
-    map(json_string_parser(options), String),
-    map(json_array_parser(options), Array),
-    map(json_object_parser(options), Object),
+    to(json_null(), Null),
+    map(json_boolean(), Boolean),
+    map(json_number(options), Number),
+    map(json_string(options), String),
+    map(json_array(options), Array),
+    map(json_object(options), Object),
   ])
-  |> padded(options)
-  |> allow_comments(options, _)
 }
 
-fn json_parser(options: JsonParseOptions) -> JsonParser(JsonValue) {
-  json_value_parser(options)
-  |> between(allow_comments(options, ws(options)), end())
+fn json_parser(options: JsonParseOptions) -> Parser(JsonValue, e) {
+  use value <- do(json_value(options))
+  use _ <- do(ws(options))
+  use _ <- do(end())
+  return(value)
 }
 
 pub type JsonParseOptions {
@@ -391,19 +373,19 @@ const jsonl_options = json_options
 pub fn parse_json_custom(
   value: String,
   options: JsonParseOptions,
-) -> Result(JsonValue, JsonParserError) {
+) -> Result(JsonValue, ParseError(e)) {
   go(json_parser(options), value)
 }
 
-pub fn parse_json(value: String) -> Result(JsonValue, JsonParserError) {
+pub fn parse_json(value: String) -> Result(JsonValue, ParseError(e)) {
   parse_json_custom(value, json_options)
 }
 
-pub fn parse_jsonc(value: String) -> Result(JsonValue, JsonParserError) {
+pub fn parse_jsonc(value: String) -> Result(JsonValue, ParseError(e)) {
   parse_json_custom(value, jsonc_options)
 }
 
-pub fn parse_json5(value: String) -> Result(JsonValue, JsonParserError) {
+pub fn parse_json5(value: String) -> Result(JsonValue, ParseError(e)) {
   parse_json_custom(value, json5_options)
 }
 
@@ -415,14 +397,12 @@ fn split_jsonl(value: String) -> List(String) {
   |> string.split("\n")
 }
 
-pub fn parse_jsonl(value: String) -> Result(List(JsonValue), JsonParserError) {
+pub fn parse_jsonl(value: String) -> Result(List(JsonValue), ParseError(e)) {
   let parse = go(json_parser(jsonl_options), _)
   list.try_map(split_jsonl(value), parse)
 }
 
-pub fn parse_jsonl_all(
-  value: String,
-) -> List(Result(JsonValue, JsonParserError)) {
+pub fn parse_jsonl_all(value: String) -> List(Result(JsonValue, ParseError(e))) {
   let parse = go(json_parser(jsonl_options), _)
   list.map(split_jsonl(value), parse)
 }

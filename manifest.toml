@@ -3,13 +3,11 @@
 
 packages = [
   { name = "gleam_stdlib", version = "0.36.0", build_tools = ["gleam"], requirements = [], otp_app = "gleam_stdlib", source = "hex", outer_checksum = "C0D14D807FEC6F8A08A7C9EF8DFDE6AE5C10E40E21325B2B29365965D82EB3D4" },
-  { name = "gleeunit", version = "1.0.2", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "gleeunit", source = "hex", outer_checksum = "D364C87AFEB26BDB4FB8A5ABDE67D635DC9FA52D6AB68416044C35B096C6882D" },
-  { name = "party", version = "1.0.0", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "party", source = "hex", outer_checksum = "13D70704E008F1AB163E6E5AED717014473898100B26852E158BD6E9BAE583BC" },
-  { name = "pears", version = "0.3.0", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "pears", source = "hex", outer_checksum = "F823EDF5C7F8606A0B7764C071B6EE8515FC341D6FC69902E81120633DF7E983" },
+  { name = "gleeunit", version = "1.1.2", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "gleeunit", source = "hex", outer_checksum = "72CDC3D3F719478F26C4E2C5FED3E657AC81EC14A47D2D2DEBB8693CA3220C3B" },
+  { name = "party", version = "1.0.2", build_tools = ["gleam"], requirements = ["gleam_stdlib"], otp_app = "party", source = "hex", outer_checksum = "6169240A11DE6793FDFB77E7375E79441B6D7FB3D3EF8274B3C109ABAFF1A8FD" },
 ]
 
 [requirements]
 gleam_stdlib = { version = "~> 0.34 or ~> 1.0" }
 gleeunit = { version = "~> 1.0" }
-party = { version = "~> 1.0"}
-pears = { version = "~> 0.3" }
+party = { version = "~> 1.0" }

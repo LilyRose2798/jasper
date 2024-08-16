@@ -591,6 +591,15 @@ fn invert_query(query: JsonQuery) -> InvJsonQuery {
   invert_query_rec(query, InvEnd)
 }
 
+// list.at has been removed from gleam/list
+// https://github.com/gleam-lang/stdlib/commit/b98705f890a2828c48dfdab291a22f145309d646
+fn list_at(in list: List(a), get index: Int) -> Result(a, Nil) {
+  case index >= 0 {
+    True -> list |> list.drop(index) |> list.first
+    False -> Error(Nil)
+  }
+}
+
 pub type JsonQueryError {
   UnexpectedType(JsonValue)
   MissingObjectKey(JsonValue, key: String)
@@ -628,7 +637,7 @@ fn query_json_rec(
       case json {
         Array(arr) as j ->
           arr
-          |> list.at(index)
+          |> list_at(index)
           |> result.replace_error(IndexOutOfBounds(j, index))
         j -> Error(UnexpectedType(j))
       }
@@ -638,7 +647,7 @@ fn query_json_rec(
       case json {
         Array(arr) ->
           arr
-          |> list.at(index)
+          |> list_at(index)
           |> result.unwrap(or)
           |> Ok
         j -> Error(UnexpectedType(j))

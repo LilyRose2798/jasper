@@ -159,36 +159,40 @@ type InvJsonQuery {
   InvForEachOk(query: InvJsonQuery)
 }
 
-fn invert_query_rec(query: JsonQuery, state: InvJsonQuery) -> InvJsonQuery {
-  case query {
-    Root -> state
-    Key(query, key) -> invert_query_rec(query, InvKey(key, state))
-    KeyOr(query, key, o) -> invert_query_rec(query, InvKeyOr(key, o, state))
-    Index(query, index) -> invert_query_rec(query, InvIndex(index, state))
-    IndexOr(query, index, or) ->
-      invert_query_rec(query, InvIndexOr(index, or, state))
-    Filter(query, predicate) ->
-      invert_query_rec(query, InvFilter(predicate, state))
-    Map(query, mapping) -> invert_query_rec(query, InvMap(mapping, state))
-    MapKeys(query, mapping) ->
-      invert_query_rec(query, InvMapKeys(mapping, state))
-    MapValues(query, mapping) ->
-      invert_query_rec(query, InvMapValues(mapping, state))
-    FilterMap(query, mapping) ->
-      invert_query_rec(query, InvFilterMap(mapping, state))
-    ForEach(query) -> invert_query_rec(query, InvForEach(state))
-    ForEachOk(query) -> invert_query_rec(query, InvForEachOk(state))
-  }
+fn invert_query(query: JsonQuery) -> InvJsonQuery {
+  do_invert_query(query, InvEnd)
 }
 
-fn invert_query(query: JsonQuery) -> InvJsonQuery {
-  invert_query_rec(query, InvEnd)
+fn do_invert_query(query: JsonQuery, state: InvJsonQuery) -> InvJsonQuery {
+  case query {
+    Root -> state
+    Key(query, key) -> do_invert_query(query, InvKey(key, state))
+    KeyOr(query, key, o) -> do_invert_query(query, InvKeyOr(key, o, state))
+    Index(query, index) -> do_invert_query(query, InvIndex(index, state))
+    IndexOr(query, index, or) ->
+      do_invert_query(query, InvIndexOr(index, or, state))
+    Filter(query, predicate) ->
+      do_invert_query(query, InvFilter(predicate, state))
+    Map(query, mapping) -> do_invert_query(query, InvMap(mapping, state))
+    MapKeys(query, mapping) ->
+      do_invert_query(query, InvMapKeys(mapping, state))
+    MapValues(query, mapping) ->
+      do_invert_query(query, InvMapValues(mapping, state))
+    FilterMap(query, mapping) ->
+      do_invert_query(query, InvFilterMap(mapping, state))
+    ForEach(query) -> do_invert_query(query, InvForEach(state))
+    ForEachOk(query) -> do_invert_query(query, InvForEachOk(state))
+  }
 }
 
 pub type JsonQueryError {
   UnexpectedType(JsonValue)
   MissingObjectKey(JsonValue, key: String)
   IndexOutOfBounds(JsonValue, index: Int)
+}
+
+pub fn query(json: JsonValue, query: JsonQuery) {
+  do_query(json, invert_query(query))
 }
 
 fn do_query(
@@ -308,8 +312,4 @@ fn do_query(
         j -> Error(UnexpectedType(j))
       }
   }
-}
-
-pub fn query(json: JsonValue, query: JsonQuery) {
-  do_query(json, invert_query(query))
 }

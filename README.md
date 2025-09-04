@@ -1,5 +1,7 @@
 # jasper
 
+Credit to [kwando](https://github.com/kwando) for the `decoder` and `to_json` functions. If the querying part of this library is not required, I recommend using their package [`json_value`](https://hexdocs.pm/json_value) instead.
+
 [![Package Version](https://img.shields.io/hexpm/v/jasper)](https://hex.pm/packages/jasper)
 [![Hex Docs](https://img.shields.io/badge/hex-docs-ffaff3)](https://hexdocs.pm/jasper/)
 

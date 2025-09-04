@@ -8,11 +8,11 @@ gleam add jasper
 ```
 ```gleam
 import gleam/io
-import jasper.{parse_json, query_json, String, Root, Key, Index}
+import jasper.{String, Root, Key, Index}
 
 pub fn main() {
-  let assert Ok(json) = parse_json("{ \"foo\": [1, true, \"hi\"] }")
-  let assert Ok(String(str)) = query_json(json, Root |> Key("foo") |> Index(2))
+  let assert Ok(json) = jasper.parse("{ \"foo\": [1, true, \"hi\"] }")
+  let assert Ok(String(str)) = jasper.query(json, Root |> Key("foo") |> Index(2))
   io.println(str)
 }
 ```

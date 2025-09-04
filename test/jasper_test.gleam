@@ -1,121 +1,107 @@
-import gleeunit
-import gleeunit/should
 import gleam/dict
+import gleeunit
 import jasper.{
-  type JsonValue, Array, Boolean, Index, IndexOutOfBounds, Key, MissingObjectKey,
-  Null, Number, Object, Root, String, UnexpectedType, parse_json, query_json,
+  Array, Bool, Float, Index, IndexOutOfBounds, Int, Key, MissingObjectKey, Null,
+  Object, Root, String, UnexpectedType,
 }
 
 pub fn main() {
   gleeunit.main()
 }
 
-fn should_parse(json: String, result: JsonValue) {
-  json
-  |> parse_json
-  |> should.equal(Ok(result))
+pub fn parse_float_test() {
+  assert jasper.parse("4.2") == Ok(Float(4.2))
 }
 
-pub fn parse_numbers_test() {
-  should_parse("4.2", Number(4.2))
-  should_parse("42", Number(42.0))
+pub fn parse_int_test() {
+  assert jasper.parse("42") == Ok(Int(42))
 }
 
-pub fn parse_booleans_test() {
-  should_parse("true", Boolean(True))
-  should_parse("false", Boolean(False))
+pub fn parse_bool_true_test() {
+  assert jasper.parse("true") == Ok(Bool(True))
+}
+
+pub fn parse_bool_false_test() {
+  assert jasper.parse("false") == Ok(Bool(False))
 }
 
 pub fn parse_null_test() {
-  should_parse("null", Null)
+  assert jasper.parse("null") == Ok(Null)
 }
 
 pub fn parse_strings_test() {
-  should_parse("\"hello\"", String("hello"))
+  assert jasper.parse("\"hello\"") == Ok(String("hello"))
 }
 
 pub fn parse_arrays_test() {
-  should_parse("[]", Array([]))
-  should_parse("[1, 2, 3]", Array([Number(1.0), Number(2.0), Number(3.0)]))
-  should_parse(
-    "[true, false, null]",
-    Array([Boolean(True), Boolean(False), Null]),
-  )
-  should_parse(
-    "[\"hello\", \"world\"]",
-    Array([String("hello"), String("world")]),
-  )
+  assert jasper.parse("[]") == Ok(Array([]))
+  assert jasper.parse("[1, 2, 3]") == Ok(Array([Int(1), Int(2), Int(3)]))
+  assert jasper.parse("[true, false, null]")
+    == Ok(Array([Bool(True), Bool(False), Null]))
+  assert jasper.parse("[\"hello\", \"world\"]")
+    == Ok(Array([String("hello"), String("world")]))
 }
 
 pub fn parse_objects_test() {
-  should_parse("{}", Object(dict.new()))
-  should_parse(
-    "{\"a\": 1, \"b\": 2}",
-    Object(dict.from_list([#("a", Number(1.0)), #("b", Number(2.0))])),
-  )
-  should_parse(
-    "{\"a\": true, \"b\": false, \"c\": null}",
-    Object(
-      dict.from_list([
-        #("a", Boolean(True)),
-        #("b", Boolean(False)),
-        #("c", Null),
-      ]),
-    ),
-  )
-  should_parse(
-    "{\"a\": \"hello\", \"b\": \"world\"}",
-    Object(dict.from_list([#("a", String("hello")), #("b", String("world"))])),
-  )
-  should_parse(
-    "{\"👋\": [1, 2, 3], \"b\": {\"c\": 4}}",
-    Object(
-      dict.from_list([
-        #("👋", Array([Number(1.0), Number(2.0), Number(3.0)])),
-        #("b", Object(dict.from_list([#("c", Number(4.0))]))),
-      ]),
-    ),
-  )
+  assert jasper.parse("{}") == Ok(Object(dict.new()))
+  assert jasper.parse("{\"a\": 1, \"b\": 2}")
+    == Ok(Object(dict.from_list([#("a", Int(1)), #("b", Int(2))])))
+  assert jasper.parse("{\"a\": true, \"b\": false, \"c\": null}")
+    == Ok(
+      Object(
+        dict.from_list([#("a", Bool(True)), #("b", Bool(False)), #("c", Null)]),
+      ),
+    )
+  assert jasper.parse("{\"a\": \"hello\", \"b\": \"world\"}")
+    == Ok(
+      Object(dict.from_list([#("a", String("hello")), #("b", String("world"))])),
+    )
+  assert jasper.parse("{\"👋\": [1, 2, 3], \"b\": {\"c\": 4}}")
+    == Ok(
+      Object(
+        dict.from_list([
+          #("👋", Array([Int(1), Int(2), Int(3)])),
+          #("b", Object(dict.from_list([#("c", Int(4))]))),
+        ]),
+      ),
+    )
 }
 
 pub fn query_test() {
-  query_json(String("foo"), Root)
-  |> should.equal(Ok(String("foo")))
-  query_json(
-    String("foo"),
-    Root
-      |> Key("foo"),
-  )
-  |> should.equal(Error(UnexpectedType(String("foo"))))
-  query_json(
-    String("foo"),
-    Root
-      |> Index(2),
-  )
-  |> should.equal(Error(UnexpectedType(String("foo"))))
-  query_json(
-    Array([String("foo")]),
-    Root
-      |> Index(2),
-  )
-  |> should.equal(Error(IndexOutOfBounds(Array([String("foo")]), 2)))
-  query_json(
-    Object(dict.from_list([#("bar", Array([String("foo")]))])),
-    Root
-      |> Key("bar")
-      |> Index(2),
-  )
-  |> should.equal(Error(IndexOutOfBounds(Array([String("foo")]), 2)))
-  query_json(
-    Object(dict.from_list([#("bar", Array([String("foo")]))])),
-    Root
-      |> Key("foo")
-      |> Index(2),
-  )
-  |> should.equal(
-    Error(MissingObjectKey(
+  assert jasper.query(String("foo"), Root) == Ok(String("foo"))
+  assert jasper.query(
+      String("foo"),
+      Root
+        |> Key("foo"),
+    )
+    == Error(UnexpectedType(String("foo")))
+  assert jasper.query(
+      String("foo"),
+      Root
+        |> Index(2),
+    )
+    == Error(UnexpectedType(String("foo")))
+  assert jasper.query(
+      Array([String("foo")]),
+      Root
+        |> Index(2),
+    )
+    == Error(IndexOutOfBounds(Array([String("foo")]), 2))
+  assert jasper.query(
+      Object(dict.from_list([#("bar", Array([String("foo")]))])),
+      Root
+        |> Key("bar")
+        |> Index(2),
+    )
+    == Error(IndexOutOfBounds(Array([String("foo")]), 2))
+  assert jasper.query(
+      Object(dict.from_list([#("bar", Array([String("foo")]))])),
+      Root
+        |> Key("foo")
+        |> Index(2),
+    )
+    == Error(MissingObjectKey(
       Object(dict.from_list([#("bar", Array([String("foo")]))])),
       "foo",
-    )),
-  )
+    ))
 }
